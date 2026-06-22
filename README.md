@@ -36,13 +36,18 @@ npx playwright install chromium
 | Screenshot original + served clone, compute SSIM & pixel diff | `lib/clone.ts`, `lib/similarity.ts` |
 | Persist metadata JSON | `lib/storage.ts` → `data/clones/{slug}.json` |
 | Serve clone in a full-viewport iframe | `app/clones/[slug]/page.tsx` |
+| Serve stored clone files (HTML/assets/screenshots) from disk | `app/clones/[slug]/[...path]/route.ts` |
 | Dashboard (clone / history / delete / regenerate) | `app/page.tsx` |
 | Side-by-side preview + stats | `app/preview/[slug]/page.tsx` |
 
 ### Storage layout
 
+Clone files live in `clone-store/` (not `public/`) and are served through a
+route handler — `next start` only serves `public/` files that existed at build
+time, so runtime-written files there would 404.
+
 ```
-public/clones/{slug}/
+clone-store/{slug}/
   index.html        # rewritten, self-contained snapshot
   assets/{host}/…   # downloaded assets, folder structure preserved
   original.png      # original-page screenshot
@@ -50,6 +55,10 @@ public/clones/{slug}/
   diff.png          # pixel-diff visualization
 data/clones/{slug}.json   # metadata
 ```
+
+`/clones/{slug}/*` (e.g. `index.html`, `assets/…`, `*.png`) is served by
+`app/clones/[slug]/[...path]/route.ts`, which streams files from
+`clone-store/{slug}` with the correct content-type and a path-traversal guard.
 
 ### Metadata shape
 

@@ -1,8 +1,13 @@
 import path from "node:path";
 import crypto from "node:crypto";
 
-/** Root of the on-disk store that Next serves statically (public/clones). */
-export const PUBLIC_CLONES_DIR = path.join(process.cwd(), "public", "clones");
+/**
+ * Root of the on-disk store for served clone files (HTML, assets, screenshots).
+ * Kept OUTSIDE /public on purpose: `next start` only serves public files that
+ * existed at build time, so runtime-written files there 404. We serve these
+ * through a route handler (app/clones/[slug]/[...path]) that reads from disk.
+ */
+export const CLONE_STORE_DIR = path.join(process.cwd(), "clone-store");
 
 /** Root of the metadata store (one JSON file per clone). */
 export const DATA_DIR = path.join(process.cwd(), "data", "clones");
@@ -45,7 +50,7 @@ export function urlToSlug(rawUrl: string): string {
 
 /** Disk dir holding a clone's served files (html, assets, screenshots). */
 export function cloneDir(slug: string): string {
-  return path.join(PUBLIC_CLONES_DIR, slug);
+  return path.join(CLONE_STORE_DIR, slug);
 }
 
 /** Disk path to a clone's metadata JSON. */

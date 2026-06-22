@@ -70,7 +70,11 @@ export async function runClone(url: string, opts: CloneOptions): Promise<CloneMe
       }
     }
 
-    base.status = cloneShotOk && base.assetCount > 0 ? "success" : "partial";
+    // Success when our clone rendered and was screenshotted. A page can
+    // legitimately have zero external assets (everything inlined), so asset
+    // count is not a success criterion. "partial" means the snapshot was
+    // captured but we couldn't render/screenshot the served clone.
+    base.status = cloneShotOk ? "success" : "partial";
     base.generationMs = Date.now() - started;
     await saveMeta(base);
     return base;

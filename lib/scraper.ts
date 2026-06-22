@@ -80,7 +80,12 @@ export async function scrapeAndStore(url: string, slug: string): Promise<ScrapeR
     });
 
     page.setDefaultNavigationTimeout(NAV_TIMEOUT);
-    await page.goto(url, { waitUntil: "networkidle", timeout: NAV_TIMEOUT });
+    // Wait for the DOM to be ready (reliable), then treat network idle as
+    // best-effort: ad/analytics-heavy pages (e.g. news sites) keep connections
+    // open indefinitely and never reach "networkidle", so requiring it would
+    // time out and fail an otherwise-cloneable page.
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
+    await page.waitForLoadState("networkidle", { timeout: 12_000 }).catch(() => {});
     await autoScroll(page);
     // Settle any lazy-loaded assets triggered by scrolling.
     await page.waitForTimeout(800);
