@@ -127,15 +127,27 @@ export async function scrapeAndStore(url: string, slug: string): Promise<ScrapeR
     }
 
     // Write asset bytes, rewriting url(...) references inside CSS files.
+    // A single asset that can't be written (path too long, odd characters,
+    // permissions) must not abort the whole clone — skip it and drop its local
+    // mapping so the HTML falls back to the original remote URL.
+    const writtenRecords: AssetRecord[] = [];
     for (const rec of records) {
       const cap = captured.get(rec.absoluteUrl)!;
-      await fs.mkdir(path.dirname(rec.diskPath), { recursive: true });
-      if (rec.kind === "css") {
-        const css = cap.buffer.toString("utf8");
-        const rewritten = rewriteCssUrls(css, rec.absoluteUrl, urlToWebPath);
-        await fs.writeFile(rec.diskPath, rewritten, "utf8");
-      } else {
-        await fs.writeFile(rec.diskPath, cap.buffer);
+      try {
+        await fs.mkdir(path.dirname(rec.diskPath), { recursive: true });
+        if (rec.kind === "css") {
+          const css = cap.buffer.toString("utf8");
+          const rewritten = rewriteCssUrls(css, rec.absoluteUrl, urlToWebPath);
+          await fs.writeFile(rec.diskPath, rewritten, "utf8");
+        } else {
+          await fs.writeFile(rec.diskPath, cap.buffer);
+        }
+        writtenRecords.push(rec);
+      } catch {
+        // Remove every URL alias that pointed at this (unwritten) file.
+        for (const [u, wp] of urlToWebPath) {
+          if (wp === rec.webPath) urlToWebPath.delete(u);
+        }
       }
     }
 
@@ -147,7 +159,7 @@ export async function scrapeAndStore(url: string, slug: string): Promise<ScrapeR
     return {
       finalUrl,
       title,
-      assets: records,
+      assets: writtenRecords,
       htmlDiskPath,
       originalScreenshotDiskPath,
     };

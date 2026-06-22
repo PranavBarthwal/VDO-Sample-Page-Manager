@@ -96,10 +96,21 @@ export function assetLocalName(absoluteUrl: string, contentType?: string): strin
     if (ext) rel += ext;
   }
 
-  // Sanitize each segment.
+  // Sanitize each segment and bound its length. Some URLs (tracking pixels,
+  // beacons) carry huge param-laden path segments that blow past the OS
+  // per-component / MAX_PATH limit; collapse those to a short hashed name.
   rel = rel
     .split("/")
-    .map((seg) => seg.replace(/[<>:"\\|?*\x00-\x1f]/g, "_"))
+    .map((seg) => {
+      let s = seg.replace(/[<>:"\\|?*;,=\x00-\x1f]/g, "_");
+      if (s.length > 100) {
+        let ext = path.extname(s);
+        if (ext.length > 10) ext = ""; // not a real extension
+        const hash = crypto.createHash("sha1").update(seg).digest("hex").slice(0, 8);
+        s = `${s.slice(0, 80)}-${hash}${ext}`;
+      }
+      return s;
+    })
     .join("/");
 
   return rel;
