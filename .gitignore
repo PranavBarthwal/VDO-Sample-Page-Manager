@@ -1,0 +1,13 @@
+/node_modules
+/.next
+/out
+/build
+*.tsbuildinfo
+next-env.d.ts.bak
+
+# Local clone storage (generated at runtime)
+/public/clones
+/data
+
+.DS_Store
+*.log
