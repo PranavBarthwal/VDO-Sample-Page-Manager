@@ -27,6 +27,66 @@ interface CapturedResponse {
 const NAV_TIMEOUT = 45_000;
 const ASSET_CONTENT_TYPES = /^(text\/css|image\/|font\/|application\/(font|x-font)|application\/octet-stream)/i;
 
+// Ad / tracking / analytics hosts blocked at the network layer so ads never
+// render (and can't be re-injected) — keeps the clone clean and ad-free.
+const AD_HOSTS = [
+  "doubleclick.net",
+  "googlesyndication.com",
+  "googleadservices.com",
+  "googletagservices.com",
+  "googletagmanager.com",
+  "google-analytics.com",
+  "adservice.google",
+  "amazon-adsystem.com",
+  "taboola.com",
+  "outbrain.com",
+  "adnxs.com",
+  "criteo.com",
+  "criteo.net",
+  "quantserve.com",
+  "quantcount.com",
+  "scorecardresearch.com",
+  "moatads.com",
+  "adsafeprotected.com",
+  "pubmatic.com",
+  "rubiconproject.com",
+  "casalemedia.com",
+  "3lift.com",
+  "adsrvr.org",
+  "connect.facebook.net",
+  "facebook.com/tr",
+  "amplitude.com",
+  "branch.io",
+  "permutive.com",
+];
+
+// Element selectors for first-party ad slots / consent overlays to strip from
+// the DOM (network blocking handles third-party hosts; this catches the rest).
+const AD_DOM_SELECTORS = [
+  "ins.adsbygoogle",
+  '[id^="google_ads_iframe"]',
+  '[id*="div-gpt-ad"]',
+  "[data-ad]",
+  "[data-ad-slot]",
+  "[data-google-query-id]",
+  '[class*="taboola"]',
+  '[id*="taboola"]',
+  '[class*="outbrain"]',
+  '[id*="outbrain"]',
+  '[class*="advertisement"]',
+  '[class*="ad-slot"]',
+  '[class*="ad-container"]',
+  '[class*="adslot"]',
+  '[class*="sponsored-content"]',
+  "#onetrust-consent-sdk",
+  "#onetrust-banner-sdk",
+  "#usercentrics-root",
+  '[class*="cookie-consent"]',
+  '[class*="cookie-banner"]',
+  '[id*="cookie-banner"]',
+  '[class*="gdpr"]',
+];
+
 /**
  * Render `url` in a headless browser, capture the final DOM and every CSS /
  * image / font / SVG it loaded, download them locally, rewrite all references
@@ -41,10 +101,18 @@ export async function scrapeAndStore(url: string, slug: string): Promise<ScrapeR
   try {
     browser = await chromium.launch({ args: ["--no-sandbox"] });
     const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
+      viewport: { width: 1440, height: 900 },
+      deviceScaleFactor: 1,
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
     });
+    // Block ad/tracker requests so ads never load or re-inject.
+    await context.route("**/*", (route) => {
+      const reqUrl = route.request().url();
+      if (AD_HOSTS.some((h) => reqUrl.includes(h))) return route.abort();
+      return route.continue();
+    });
+
     const page = await context.newPage();
 
     // Collect response bodies for CSS / images / fonts / SVGs as they load.
@@ -89,6 +157,12 @@ export async function scrapeAndStore(url: string, slug: string): Promise<ScrapeR
     await autoScroll(page);
     // Settle any lazy-loaded assets triggered by scrolling.
     await page.waitForTimeout(800);
+
+    // Clean + stabilize the live page BEFORE capturing HTML and the screenshot,
+    // so the "original" screenshot and the saved snapshot match (ads removed,
+    // form state preserved, lazy images promoted).
+    await cleanAndStabilize(page);
+    await page.waitForTimeout(400);
 
     const finalUrl = page.url();
     const html = await page.content();
@@ -187,6 +261,71 @@ async function autoScroll(page: import("playwright").Page): Promise<void> {
   });
 }
 
+/**
+ * Run inside the live page to maximize clone fidelity:
+ *  - remove ad / tracker / cookie-consent elements (collapse their space)
+ *  - bake form-field state (value/checked/selected) into attributes so it
+ *    survives static serialization
+ *  - promote lazy images (data-src/data-srcset -> src/srcset) and eager-load
+ * Done before HTML + screenshot capture so the original and clone match.
+ */
+async function cleanAndStabilize(page: import("playwright").Page): Promise<void> {
+  await page.evaluate((selectors: string[]) => {
+    const extra = [
+      'iframe[src*="doubleclick"]',
+      'iframe[src*="googlesyndication"]',
+      'iframe[id^="google_ads"]',
+      'iframe[id*="ad_iframe"]',
+      '[aria-label*="cookie" i]',
+    ];
+    for (const sel of [...selectors, ...extra]) {
+      try {
+        document.querySelectorAll(sel).forEach((el) => el.remove());
+      } catch {
+        /* invalid selector in this engine — skip */
+      }
+    }
+
+    // Re-enable scrolling if a consent/modal locked the body.
+    document.documentElement.style.overflow = "";
+    document.body.style.overflow = "";
+
+    // Bake form state into the markup.
+    document.querySelectorAll("input").forEach((el) => {
+      const input = el as HTMLInputElement;
+      if (input.type === "checkbox" || input.type === "radio") {
+        if (input.checked) input.setAttribute("checked", "");
+        else input.removeAttribute("checked");
+      } else if (input.value != null && input.type !== "password") {
+        input.setAttribute("value", input.value);
+      }
+    });
+    document.querySelectorAll("textarea").forEach((el) => {
+      (el as HTMLTextAreaElement).textContent = (el as HTMLTextAreaElement).value;
+    });
+    document.querySelectorAll("select").forEach((sel) => {
+      Array.from((sel as HTMLSelectElement).options).forEach((o) => {
+        if (o.selected) o.setAttribute("selected", "");
+        else o.removeAttribute("selected");
+      });
+    });
+
+    // Promote lazy-loaded images so they render in the static snapshot.
+    document.querySelectorAll("img").forEach((el) => {
+      const img = el as HTMLImageElement;
+      const dataSrc = img.getAttribute("data-src");
+      const dataSrcset = img.getAttribute("data-srcset");
+      if (dataSrc && (!img.getAttribute("src") || img.getAttribute("src")!.startsWith("data:"))) {
+        img.setAttribute("src", dataSrc);
+      }
+      if (dataSrcset && !img.getAttribute("srcset")) {
+        img.setAttribute("srcset", dataSrcset);
+      }
+      if (img.getAttribute("loading") === "lazy") img.setAttribute("loading", "eager");
+    });
+  }, AD_DOM_SELECTORS);
+}
+
 function resolveAbs(ref: string, base: string): string | null {
   if (!ref) return null;
   const trimmed = ref.trim();
@@ -264,6 +403,20 @@ function rewriteHtml(
   // an inert, faithful snapshot that won't redirect or re-fetch from the origin.
   $("script").remove();
   $("base").remove();
+
+  // Safety net: remove any ad/consent markup that survived into the snapshot.
+  for (const sel of AD_DOM_SELECTORS) {
+    try {
+      $(sel).remove();
+    } catch {
+      /* selector unsupported by cheerio — skip */
+    }
+  }
+  // Drop now-empty ad iframes pointing at known ad hosts.
+  $("iframe").each((_, el) => {
+    const src = $(el).attr("src") || "";
+    if (AD_HOSTS.some((h) => src.includes(h))) $(el).remove();
+  });
 
   const attrTargets: Array<[string, string]> = [
     ["img", "src"],
