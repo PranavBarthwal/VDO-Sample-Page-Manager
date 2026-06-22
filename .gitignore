@@ -6,7 +6,7 @@
 next-env.d.ts.bak
 
 # Local clone storage (generated at runtime)
-/public/clones
+/clone-store
 /data
 
 .DS_Store
