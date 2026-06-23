@@ -403,6 +403,12 @@ function rewriteHtml(
   // an inert, faithful snapshot that won't redirect or re-fetch from the origin.
   $("script").remove();
   $("base").remove();
+  // Remove CSP meta tags — they block our injected ad scripts (and
+  // upgrade-insecure-requests breaks http/localhost serving of the clone).
+  $('meta[http-equiv]').each((_, el) => {
+    const he = ($(el).attr("http-equiv") || "").toLowerCase();
+    if (he.includes("content-security-policy")) $(el).remove();
+  });
 
   // Safety net: remove any ad/consent markup that survived into the snapshot.
   for (const sel of AD_DOM_SELECTORS) {

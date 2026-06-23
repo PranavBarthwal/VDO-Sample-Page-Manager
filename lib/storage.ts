@@ -43,6 +43,34 @@ export async function listMeta(): Promise<CloneMeta[]> {
   return metas.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** Ad-unit placements layered onto a clone (rendered at serve time). */
+export interface AdPlacement {
+  unitId: string;
+  placement: "in-flow" | "viewport";
+  selector: string | null;
+  position: "after" | "before";
+  config: Record<string, unknown>;
+}
+
+function layoutPath(slug: string): string {
+  return path.join(cloneDir(slug), "layout.json");
+}
+
+export async function getLayout(slug: string): Promise<AdPlacement[]> {
+  try {
+    const raw = await fs.readFile(layoutPath(slug), "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as AdPlacement[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveLayout(slug: string, placements: AdPlacement[]): Promise<void> {
+  await fs.mkdir(cloneDir(slug), { recursive: true });
+  await fs.writeFile(layoutPath(slug), JSON.stringify(placements, null, 2), "utf8");
+}
+
 export async function deleteClone(slug: string): Promise<boolean> {
   const meta = await getMeta(slug);
   await fs.rm(cloneDir(slug), { recursive: true, force: true });

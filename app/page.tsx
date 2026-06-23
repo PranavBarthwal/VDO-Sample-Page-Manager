@@ -70,7 +70,13 @@ export default function Dashboard() {
   return (
     <main className="container">
       <div className="header">
-        <h1>VDO Sample Page Manager</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <h1>VDO Sample Page Manager</h1>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Link className="btn btn-sm" href="/player-lab">🎬 Player Lab</Link>
+            <Link className="btn btn-sm" href="/settings">⚙ Settings</Link>
+          </div>
+        </div>
         <p>
           Enter any public URL — we render it, capture the DOM, CSS, images and
           fonts, store them locally, and serve a clone at <code>/clones/&#123;slug&#125;</code>.
@@ -124,6 +130,11 @@ export default function Dashboard() {
                     <a className="btn btn-sm" href={c.clonePath} target="_blank" rel="noreferrer">
                       Open route
                     </a>
+                  )}
+                  {c.status !== "failed" && (
+                    <Link className="btn btn-sm" href={`/editor/${c.slug}`}>
+                      🎯 Edit ads
+                    </Link>
                   )}
                   <button
                     className="btn btn-sm"
