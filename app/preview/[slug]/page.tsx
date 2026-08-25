@@ -29,6 +29,11 @@ export default async function PreviewPage({ params }: { params: { slug: string }
               Open generated route ↗
             </a>
           )}
+          {meta.status !== "failed" && (
+            <Link className="btn btn-sm btn-primary" href={`/editor/${meta.slug}`}>
+              🎯 Edit ads
+            </Link>
+          )}
           <a className="btn btn-sm" href={meta.url} target="_blank" rel="noreferrer">
             Open original ↗
           </a>

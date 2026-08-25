@@ -1,0 +1,720 @@
+/* ============================================================================
+   VDO Player — self-contained, framework-agnostic video player widget.
+   Used in the player-lab preview and injected into cloned pages (Phase 3).
+   All styles are namespaced under .vdo-player to avoid clashing with host CSS.
+   ============================================================================ */
+
+.vdo-player {
+  --vdo-accent: #e1306c;
+  --vdo-bg: #0c0d10;
+  --vdo-fg: #ffffff;
+  --vdo-muted: rgba(255, 255, 255, 0.72);
+  --vdo-radius: 16px;
+  --vdo-control-bg: rgba(0, 0, 0, 0.35);
+  --vdo-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --vdo-morph: 520ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  position: relative;
+  box-sizing: border-box;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--vdo-fg);
+  border-radius: var(--vdo-radius);
+  background: var(--vdo-bg);
+  box-shadow: var(--vdo-shadow);
+  overflow: hidden;
+  user-select: none;
+  line-height: 1.3;
+}
+.vdo-player * {
+  box-sizing: border-box;
+}
+
+/* Stage = aspect-ratio box that morphs between content and ad ratios. */
+.vdo-stage {
+  position: relative;
+  width: 100%;
+  height: 0; /* set in JS for smooth height morph; fallback below */
+  background: #000;
+  transition: height var(--vdo-morph);
+  overflow: hidden;
+}
+.vdo-player[data-fluid="true"] .vdo-stage {
+  height: auto;
+  aspect-ratio: var(--vdo-ar, 16 / 9);
+  transition: aspect-ratio var(--vdo-morph);
+}
+
+.vdo-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+.vdo-video[hidden] {
+  display: none;
+}
+
+/* Top + bottom scrims for legible controls over any video. */
+.vdo-scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.vdo-scrim-top {
+  top: 0;
+  height: 64px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
+}
+.vdo-scrim-bottom {
+  bottom: 0;
+  height: 96px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+}
+
+/* Top bar: title + close. */
+.vdo-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.vdo-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vdo-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--vdo-accent);
+  color: #fff;
+}
+.vdo-spacer {
+  flex: 1;
+}
+.vdo-iconbtn {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--vdo-control-bg);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, transform 0.15s;
+  padding: 0;
+}
+.vdo-iconbtn:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: scale(1.06);
+}
+.vdo-iconbtn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: block;
+}
+
+/* Center play overlay (shown when paused). */
+.vdo-center {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.vdo-center-btn {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  transition: transform 0.15s, background 0.15s;
+}
+.vdo-center-btn:hover {
+  transform: scale(1.08);
+  background: var(--vdo-accent);
+}
+.vdo-center-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: #fff;
+  margin-left: 2px;
+}
+.vdo-player[data-playing="true"] .vdo-center {
+  opacity: 0;
+  pointer-events: none;
+}
+.vdo-center {
+  transition: opacity 0.2s;
+}
+
+/* Bottom controls. */
+.vdo-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vdo-progress {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  overflow: hidden;
+}
+.vdo-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: var(--vdo-accent);
+  border-radius: 999px;
+}
+.vdo-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vdo-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vdo-muted);
+  min-width: 76px;
+}
+
+/* Ad countdown chip. */
+.vdo-ad-meta {
+  position: absolute;
+  left: 12px;
+  bottom: 52px;
+  z-index: 5;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 5px 9px;
+  border-radius: 8px;
+  backdrop-filter: blur(6px);
+}
+.vdo-player[data-mode="ad"] .vdo-ad-meta {
+  display: inline-flex;
+}
+.vdo-skip {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.vdo-skip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* "AD" corner badge during ad playback. */
+.vdo-admark {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.vdo-player[data-mode="ad"] .vdo-admark {
+  display: inline-block;
+}
+
+/* ============================== PRESETS ==================================== */
+
+/* Glass — frosted, soft, modern. */
+.vdo-preset-glass {
+  --vdo-accent: #6d8bff;
+  --vdo-radius: 20px;
+  --vdo-control-bg: rgba(255, 255, 255, 0.16);
+  --vdo-shadow: 0 20px 60px rgba(40, 60, 140, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.vdo-preset-glass .vdo-pill {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+/* Minimal — clean dark, thin accent. */
+.vdo-preset-minimal {
+  --vdo-accent: #ffffff;
+  --vdo-radius: 10px;
+  --vdo-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.vdo-preset-minimal .vdo-progress-fill {
+  background: #fff;
+}
+.vdo-preset-minimal .vdo-pill {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Neon — vibrant, glowy, for entertainment/reels. */
+.vdo-preset-neon {
+  --vdo-accent: #ff2d9b;
+  --vdo-radius: 18px;
+  --vdo-shadow: 0 0 0 1px rgba(255, 45, 155, 0.4), 0 18px 50px rgba(255, 45, 155, 0.35);
+}
+.vdo-preset-neon .vdo-progress-fill {
+  background: linear-gradient(90deg, #ff2d9b, #8a5cff);
+  box-shadow: 0 0 10px rgba(255, 45, 155, 0.8);
+}
+
+/* Editorial — light chrome, news-site friendly. */
+.vdo-preset-editorial {
+  --vdo-accent: #c8102e;
+  --vdo-bg: #111;
+  --vdo-radius: 6px;
+  --vdo-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.vdo-preset-editorial .vdo-title {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+/* Cinematic — letterbox vibe, gradient controls. */
+.vdo-preset-cinematic {
+  --vdo-accent: #f5c451;
+  --vdo-radius: 4px;
+  --vdo-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+.vdo-preset-cinematic .vdo-scrim-bottom {
+  height: 120px;
+}
+
+/* YouTube — familiar red, dark chrome. */
+.vdo-preset-youtube {
+  --vdo-accent: #ff0000;
+  --vdo-radius: 12px;
+  --vdo-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+.vdo-preset-youtube .vdo-pill { background: #ff0000; }
+
+/* Broadcast (JW-Player style) — corporate blue, crisp solid control bar. */
+.vdo-preset-broadcast {
+  --vdo-accent: #2f80ed;
+  --vdo-radius: 4px;
+  --vdo-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+}
+.vdo-preset-broadcast .vdo-controls {
+  background: linear-gradient(to top, rgba(8, 14, 24, 0.92), transparent);
+}
+
+/* Connatix-style — rounded, teal, premium feel (great with playlists). */
+.vdo-preset-connatix {
+  --vdo-accent: #00c2a8;
+  --vdo-radius: 22px;
+  --vdo-shadow: 0 22px 60px rgba(0, 120, 110, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Teads-style in-read — light chrome, editorial blue. */
+.vdo-preset-teads {
+  --vdo-accent: #1a73e8;
+  --vdo-bg: #0e1116;
+  --vdo-radius: 12px;
+  --vdo-shadow: 0 16px 44px rgba(20, 40, 80, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Reels — Instagram-style vertical with segmented story bar. */
+.vdo-preset-reels {
+  --vdo-accent: #ff3040;
+  --vdo-radius: 16px;
+  --vdo-shadow: 0 18px 50px rgba(255, 48, 64, 0.25);
+}
+.vdo-preset-reels .vdo-pill {
+  background: linear-gradient(45deg, #feda75, #d62976, #962fbf);
+}
+
+/* Spotlight — moody, gold accent, heavy vignette. */
+.vdo-preset-spotlight {
+  --vdo-accent: #ffd24a;
+  --vdo-radius: 14px;
+  --vdo-shadow: 0 26px 70px rgba(0, 0, 0, 0.7);
+}
+.vdo-preset-spotlight .vdo-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* Vapor — gradient, playful, social/entertainment. */
+.vdo-preset-vapor {
+  --vdo-accent: #b06bff;
+  --vdo-radius: 18px;
+  --vdo-shadow: 0 18px 55px rgba(160, 90, 255, 0.35);
+}
+.vdo-preset-vapor .vdo-progress-fill {
+  background: linear-gradient(90deg, #b06bff, #56ccf2);
+}
+.vdo-preset-vapor .vdo-pill {
+  background: linear-gradient(90deg, #b06bff, #56ccf2);
+}
+
+/* Mono — stark black & white, sharp, brutalist. */
+.vdo-preset-mono {
+  --vdo-accent: #ffffff;
+  --vdo-radius: 0px;
+  --vdo-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  border: 1.5px solid #fff;
+}
+.vdo-preset-mono .vdo-pill {
+  background: #fff;
+  color: #000;
+}
+
+/* ===================== OPTIONAL FEATURE LAYERS ============================= */
+
+/* Entrance animations. */
+@keyframes vdo-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vdo-slide { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@keyframes vdo-scale { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: none; } }
+@keyframes vdo-flip { from { opacity: 0; transform: perspective(800px) rotateX(18deg); } to { opacity: 1; transform: none; } }
+.vdo-enter-fade { animation: vdo-fade 0.5s ease both; }
+.vdo-enter-slide { animation: vdo-slide 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.vdo-enter-scale { animation: vdo-scale 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.vdo-enter-flip { animation: vdo-flip 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Glow ring (pulsing accent). */
+@keyframes vdo-glowpulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--vdo-accent) 35%, transparent); }
+}
+.vdo-glow { animation: vdo-glowpulse 2.2s ease-in-out infinite; }
+
+/* Story-style segmented progress (top). */
+.vdo-storybar {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  right: 10px;
+  z-index: 6;
+  display: flex;
+  gap: 4px;
+  height: 3px;
+}
+.vdo-player[data-storybar="true"] .vdo-top { top: 14px; }
+.vdo-storyseg {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.vdo-storyseg > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: #fff;
+}
+
+/* CTA overlay button (common in video ads). */
+.vdo-cta {
+  position: absolute;
+  right: 12px;
+  bottom: 56px;
+  z-index: 6;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  background: var(--vdo-accent);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  animation: vdo-fade 0.4s ease both;
+  text-decoration: none;
+}
+.vdo-cta.vdo-cta-show { display: inline-flex; }
+.vdo-cta::after {
+  content: "›";
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* "Up Next" playlist rail (Connatix/Outbrain style). */
+.vdo-playlist {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 56px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+}
+.vdo-playlist::-webkit-scrollbar { display: none; }
+.vdo-player:hover .vdo-playlist,
+.vdo-player[data-playlist-open="true"] .vdo-playlist {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.vdo-pl-item {
+  flex: 0 0 auto;
+  width: 92px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1.5px solid transparent;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.vdo-pl-item:hover { transform: translateY(-2px); }
+.vdo-pl-item.vdo-pl-active { border-color: var(--vdo-accent); }
+.vdo-pl-thumb {
+  width: 100%;
+  height: 52px;
+  object-fit: cover;
+  display: block;
+  background: #222;
+}
+.vdo-pl-title {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 4px 5px;
+  color: var(--vdo-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===================== BRAND SKIN (Teads-style takeover) =================== */
+.vdo-skin {
+  --vdo-accent: #1a73e8;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  isolation: isolate;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.vdo-skin * { box-sizing: border-box; }
+.vdo-skin-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #0b0d12;
+}
+.vdo-skin-bg video,
+.vdo-skin-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.vdo-skin-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.15) 30%, rgba(0, 0, 0, 0.55) 100%);
+}
+.vdo-skin-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  color: #fff;
+}
+.vdo-skin-logo {
+  max-height: 34px;
+  max-width: 130px;
+  object-fit: contain;
+}
+.vdo-skin-brandtag {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-size: 18px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.vdo-skin-headline {
+  font-size: 15px;
+  font-weight: 600;
+  opacity: 0.92;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.vdo-skin-adlabel {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+/* Centered "page" content the skin wraps around. */
+.vdo-skin-content {
+  position: relative;
+  z-index: 2;
+  max-width: 680px;
+  margin: 70px auto 92px;
+  background: #fff;
+  color: #15171c;
+  border-radius: 10px;
+  padding: 26px 30px;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
+  line-height: 1.6;
+}
+.vdo-skin-cta {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 22px;
+  z-index: 4;
+  width: 260px;
+  height: 60px;
+  border: none;
+  border-radius: 10px;
+  background: var(--vdo-accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: transform 0.15s;
+}
+.vdo-skin-cta:hover { transform: translateX(-50%) translateY(-2px); }
+.vdo-skin-mute {
+  position: absolute;
+  right: 18px;
+  bottom: 22px;
+  z-index: 4;
+}
+/* End card (shown when the skin video finishes). */
+.vdo-skin-endcard {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 12, 0.86);
+  backdrop-filter: blur(4px);
+}
+.vdo-skin[data-ended="true"] .vdo-skin-endcard { display: flex; }
+.vdo-endcard-box {
+  width: min(520px, 86%);
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #11151c, #1c2230);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #fff;
+  text-align: center;
+  padding: 24px;
+}
+.vdo-endcard-box h3 { margin: 0; font-size: 22px; }
+.vdo-endcard-actions { display: flex; gap: 10px; }
+.vdo-endcard-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.vdo-endcard-primary { background: var(--vdo-accent); color: #fff; }
+.vdo-endcard-replay {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Floating / sticky wrapper (used by Phase 2 sticky unit, available now). */
+.vdo-floating {
+  position: fixed;
+  z-index: 2147483000;
+  transition: opacity 0.3s, transform 0.3s;
+}
+.vdo-floating[data-corner="br"] { right: 20px; bottom: 20px; }
+.vdo-floating[data-corner="bl"] { left: 20px; bottom: 20px; }
+.vdo-floating[data-corner="tr"] { right: 20px; top: 20px; }
+.vdo-floating[data-corner="tl"] { left: 20px; top: 20px; }
+.vdo-floating[data-collapsed="true"] {
+  transform: translateY(calc(100% + 24px));
+  opacity: 0;
+  pointer-events: none;
+}

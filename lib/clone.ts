@@ -90,7 +90,7 @@ export async function runClone(url: string, opts: CloneOptions): Promise<CloneMe
 async function screenshotClone(pageUrl: string, outPath: string): Promise<void> {
   const browser = await chromium.launch({ args: ["--no-sandbox"] });
   try {
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 30_000 });
     await page.waitForTimeout(500);
